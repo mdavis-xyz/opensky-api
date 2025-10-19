@@ -1,9 +1,26 @@
-# The official OpenSky Network API
+# The OpenSky Network API Fork
 
-This repository contains API client implementations for the OpenSky Network in
-Python and Java as well as the sources for the [documentation](https://openskynetwork.github.io/opensky-api/). By using the OpenSky API, you agree with our [terms of use](https://opensky-network.org/about/terms-of-use).
+This is a fork of [the official OpenSky API client repo](https://github.com/openskynetwork/opensky-api).
 
+This fork implements:
 
+* OAuth
+* Use `requests.Session` to re-use connections, to speed up code
+* Client-side rate limits (the official repo silently returns None if you try to make many requests quickly. This fork sleeps and then sends the request)
+* Clearer error messages
+* Upon receiving an HTTP error, an exception will be raised. (The official client silently ignores all errors and returns None) 
+* Corrected documentation and implementation of timespan limits
+* Document how to display logs to the Python logger
+* Use a `requests.Session()`, so that the TLS and TCP connection is re-used across multiple requests, for performance reasons, and to simplify authentication handling
+* Rename the `url_post` argument to an internal function, because it's for a GET request, so the name was misleading
+*  the tests can now be run with just `python test*.py` (At first I thought the tests were passing, then I realised that they weren't actually being run.)
+* For requests where the expected behavior from the server is to return a 404 if the query is valid but yields an empty result set, this is coerced into returning an empty Python list
+
+Install this fork with:
+
+```
+pip install git+https://github.com/mdavis-xyz/opensky-api.git@fork
+```
 
 ## Python API
 

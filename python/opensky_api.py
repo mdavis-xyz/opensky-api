@@ -374,10 +374,11 @@ class OpenSkyApi(object):
         :param callable func: the API function to evaluate.
         :rtype: bool
         """
-        if self._anonymous:
-            return abs(time.time() - self._last_requests[func]) >= time_diff_noauth
-        else:
-            return abs(time.time() - self._last_requests[func]) >= time_diff_auth
+        time_elapsed_since_last = time.time() - self._last_requests[func]
+        time_to_wait_since_last = time_diff_noauth if self._anonymous else time_diff_auth
+        time_remaining = time_to_wait_since_last - time_elapsed_since_last
+        if time_remaining > 0:
+            time.sleep(time_remaining)
 
     @staticmethod
     def _check_lat(lat):
@@ -405,9 +406,7 @@ class OpenSkyApi(object):
         :return: OpenSkyStates if request was successful, None otherwise.
         :rtype: OpenSkyStates | None
         """
-        if not self._check_rate_limit(10, 5, self.get_states):
-            logger.debug("Blocking request due to rate limit.")
-            return None
+        self._check_rate_limit(10, 5, self.get_states)
 
         t = time_secs
         if type(time_secs) == datetime:
@@ -451,9 +450,8 @@ class OpenSkyApi(object):
         """
         if self._anonymous:
             raise Exception("No authentication provided for get_my_states!")
-        if not self._check_rate_limit(0, 1, self.get_my_states):
-            logger.debug("Blocking request due to rate limit.")
-            return None
+        self._check_rate_limit(0, 1, self.get_my_states)
+
         t = time_secs
         if type(time_secs) == datetime:
             t = calendar.timegm(t.timetuple())

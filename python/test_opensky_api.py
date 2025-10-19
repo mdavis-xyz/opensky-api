@@ -271,7 +271,7 @@ class TestOpenSkyApi(TestCase):
 
     def test_get_arrivals_by_airport_too_long_time_interval(self):
         with self.assertRaisesRegex(
-            Exception, "The time interval must be smaller than 7 days"
+            Exception, "The time interval must span no more than 2 dates in UTC"
         ):
             r = self.api.get_arrivals_by_airport("EDDF", 1517227200, 1517832001)
 

@@ -282,9 +282,6 @@ class OpenSkyApi(object):
         """
         self._session = requests.Session()
 
-        
-        oauth_url = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
-
         if client_json_path:
             # read the secret from a file
             if client_id or client_secret or username or password:
@@ -300,27 +297,8 @@ class OpenSkyApi(object):
             elif client_secret is None:
                 raise ValueError("Must provide a client_secret if providing a client_id (OAuth)")
 
-            logger.debug("Requesting OAuth token")
-            r = self._session.post(
-                oauth_url,
-                data={
-                    'grant_type': 'client_credentials',
-                    'client_id': client_id,
-                    'client_secret': client_secret
-                },
-                headers={'Content-Type': 'application/x-www-form-urlencoded'}
-            )
+            self._get_token(client_id, client_secret)
 
-            if r.status_code != 200:
-                logger.error("Request to {} returned status {}".format(oauth_url, r.status_code))
-                raise ValueError("Authentication Failure (OAuth token generation)") from ex
-
-            self._oauth_token = r.json()['access_token']
-
-            self._session.headers.update({
-                'Authorization': "Bearer " + self._oauth_token
-            })
-            logger.debug("OAuth token obtained successfully")
             self._anonymous = False
 
         # Basic Auth (deprecated)
@@ -335,6 +313,51 @@ class OpenSkyApi(object):
         self._api_url = "https://opensky-network.org/api"
         self._last_requests = defaultdict(lambda: 0)
         
+    def _get_token(self, client_id, client_secret, retries=3):
+        """
+        Sends HTTP request to the authentication endpoint and
+        returns nothing.
+        The token is added to the session.
+        Includes sleep and retry upon failure.
+        Raises an exception after retries are exhausted.
+
+        :param str client_id
+        :param str client_secret
+        :rtype: None
+        
+        """
+
+        oauth_url = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
+
+        logger.debug("Requesting OAuth token")
+
+        r = self._session.post(
+            oauth_url,
+            data={
+                'grant_type': 'client_credentials',
+                'client_id': client_id,
+                'client_secret': client_secret
+            },
+            headers={'Content-Type': 'application/x-www-form-urlencoded'}
+        )
+
+        if r.status_code != 200:            
+            if retries > 0:
+                time.sleep(10 / retries) # exponential backoff
+                logger.debug("Request to {} returned status {}".format(oauth_url, r.status_code))
+                logger.debug("Retrying OAuth token request")
+                return self._get_token(client_id, client_secret, retries=retries-1)
+            else:
+                logger.error("Request to {} returned status {}".format(oauth_url, r.status_code))
+                raise ValueError("Authentication Failure (OAuth token generation)")
+
+        logger.debug("OAuth token obtained successfully")        
+
+        self._oauth_token = r.json()['access_token']
+        self._session.headers.update({
+            'Authorization': "Bearer " + self._oauth_token
+        })
+
 
     def _get_json(self, path, callee, params=None, _404_as_empty=False):
         """

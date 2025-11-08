@@ -297,7 +297,11 @@ class OpenSkyApi(object):
             elif client_secret is None:
                 raise ValueError("Must provide a client_secret if providing a client_id (OAuth)")
 
-            self._get_token(client_id, client_secret)
+            self.client_id = client_id
+            self.client_secret = client_secret
+
+            logger.debug("Requesting OAuth token")
+            self._get_token()
 
             self._anonymous = False
 
@@ -313,7 +317,7 @@ class OpenSkyApi(object):
         self._api_url = "https://opensky-network.org/api"
         self._last_requests = defaultdict(lambda: 0)
         
-    def _get_token(self, client_id, client_secret, retries=3):
+    def _get_token(self, retries=3):
         """
         Sends HTTP request to the authentication endpoint and
         returns nothing.
@@ -321,22 +325,18 @@ class OpenSkyApi(object):
         Includes sleep and retry upon failure.
         Raises an exception after retries are exhausted.
 
-        :param str client_id
-        :param str client_secret
         :rtype: None
         
         """
 
         oauth_url = "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token"
 
-        logger.debug("Requesting OAuth token")
-
         r = self._session.post(
             oauth_url,
             data={
                 'grant_type': 'client_credentials',
-                'client_id': client_id,
-                'client_secret': client_secret
+                'client_id': self.client_id,
+                'client_secret': self.client_secret
             },
             headers={'Content-Type': 'application/x-www-form-urlencoded'}
         )
@@ -357,6 +357,7 @@ class OpenSkyApi(object):
         self._session.headers.update({
             'Authorization': "Bearer " + self._oauth_token
         })
+        self._oauth_expiry = time.time() + r.json()['expires_in'] - 1
 
 
     def _get_json(self, path, callee, params=None, _404_as_empty=False):
@@ -371,16 +372,23 @@ class OpenSkyApi(object):
         :rtype: dict
         
         """
+
+        if getattr(self, '_oauth_expiry', float('inf')) < time.time():
+            logger.debug("Refreshing OAuth token")
+            self._get_token()
+
         r = self._session.get(
             "{0:s}{1:s}".format(self._api_url, path),
             params=params,
             timeout=15.00,
         )
+        
         if _404_as_empty and (r.status_code == 404):
             # Some API paths are defined to return a 404 when the result set is empty
             logger.debug("404 response turned into empty list")
             self._last_requests[callee] = time.time()
             return []
+        
         elif r.status_code != 200:
             logger.error("Error response with status {}, body: {}".format(r.status_code, repr(r.text)))
             r.raise_for_status()
